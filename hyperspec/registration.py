@@ -1,52 +1,20 @@
 import json
 from pathlib import Path
-from typing import TypeVar
 
 import cv2
 import imutils
 import numpy as np
-import spectral
+import numpy.typing as npt
 import typer
 import xarray as xr
 from scipy.ndimage import gaussian_filter
 
+from hyperspec.io import crop, read_cube
+
 __all__ = ["register"]
 
-TCropArr = TypeVar("TCropArr", np.ndarray, xr.DataArray)
 
-
-def crop(arr: TCropArr, bounds: np.ndarray) -> TCropArr:
-    xmin, xmax = np.sort(bounds, axis=0)[:, 0][[0, -1]]
-    ymin, ymax = np.sort(bounds, axis=1)[:, 1][[0, -1]]
-    return arr[ymin:ymax, xmin:xmax]
-
-
-def read_cube(path: Path, bounds: np.ndarray | None, smooth: float = 0.0) -> xr.DataArray:
-    raw = spectral.open_image(str(path))
-    if type(raw) != spectral.io.bilfile.BilFile:
-        _err = f"Expected BIL hypercube, got {type(raw)}"
-        raise ValueError(_err)
-
-    data = np.rot90(raw.asarray(), -1)
-    if smooth > 0.0:
-        data = gaussian_filter(data, sigma=smooth)
-
-    cube = xr.DataArray(
-        data,
-        dims=("y", "x", "band"),
-        coords={
-            "x": np.arange(raw.ncols),
-            "y": np.arange(raw.nrows),
-            "band": raw.bands.centers,
-        },
-    )
-
-    if bounds is not None:
-        cube = crop(cube, bounds)
-    return cube
-
-
-def read_preview(cube_path: Path, bounds: np.ndarray | None, smooth: float = 0.0) -> np.ndarray:
+def read_preview(cube_path: Path, bounds: npt.NDArray[np.int_] | None, smooth: float = 0.0) -> np.ndarray:
     ident = cube_path.name.removeprefix("REFLECTANCE_").removesuffix(".hdr")
     path = cube_path.parents[1] / f"{ident}.png"
     if not path.exists():
@@ -82,7 +50,7 @@ def register(
     smooth: float = 0.0,
     debug: bool = False,
     save: Path | None = None,
-) -> tuple[xr.DataArray, np.ndarray]:
+) -> tuple[xr.DataArray, npt.NDArray]:
     capture_id = src_path.parent.parts[-2]
 
     with open(crops_path) as f:
