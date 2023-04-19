@@ -10,6 +10,8 @@ import typer
 import xarray as xr
 from scipy.ndimage import gaussian_filter
 
+__all__ = ["register"]
+
 TCropArr = TypeVar("TCropArr", np.ndarray, xr.DataArray)
 
 
@@ -68,10 +70,10 @@ def _cli(
     smooth: float = 0.0,
     debug: bool = False,
 ):
-    align(dst_path, src_path, crops_path, max_feat=max_feat, smooth=smooth, debug=debug, save=out_path)
+    register(dst_path, src_path, crops_path, max_feat=max_feat, smooth=smooth, debug=debug, save=out_path)
 
 
-def align(
+def register(
     dst_path: Path,
     src_path: Path,
     crops_path: Path,
