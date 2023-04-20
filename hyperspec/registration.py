@@ -8,25 +8,10 @@ import numpy as np
 import numpy.typing as npt
 import typer
 import xarray as xr
-from scipy.ndimage import gaussian_filter
 
-from hyperspec.io import crop, read_cube
+from hyperspec.io import read_cube, read_preview
 
 __all__ = ["register"]
-
-
-def read_preview(cube_path: Path, bounds: npt.NDArray[np.int_] | None, smooth: float = 0.0) -> np.ndarray:
-    ident = cube_path.name.removeprefix("REFLECTANCE_").removesuffix(".hdr")
-    path = cube_path.parents[1] / f"{ident}.png"
-    if not path.exists():
-        _err = f"Preview image not found at {path}"
-        raise FileNotFoundError(_err)
-    preview = cv2.cvtColor(cv2.imread(str(path), cv2.IMREAD_COLOR), cv2.COLOR_BGR2GRAY)
-    if smooth > 0.0:
-        preview = gaussian_filter(preview, sigma=smooth)
-    if bounds is not None:
-        preview = crop(preview, bounds)
-    return preview
 
 
 def _cli(

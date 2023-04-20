@@ -1,13 +1,14 @@
 from pathlib import Path
 from typing import TypeVar
 
+import cv2
 import numpy as np
 import numpy.typing as npt
 import spectral
 import xarray as xr
 from scipy.ndimage import gaussian_filter
 
-__all__ = ["read_cube", "crop"]
+__all__ = ["read_cube", "crop", "read_preview"]
 
 TCropArr = TypeVar("TCropArr", npt.NDArray, xr.DataArray)
 
@@ -41,3 +42,17 @@ def read_cube(path: Path, bounds: npt.NDArray | None, smooth: float = 0.0) -> xr
     if bounds is not None:
         cube = crop(cube, bounds)
     return cube
+
+
+def read_preview(cube_path: Path, bounds: npt.NDArray[np.int_] | None, smooth: float = 0.0) -> np.ndarray:
+    ident = cube_path.name.removeprefix("REFLECTANCE_").removesuffix(".hdr")
+    path = cube_path.parents[1] / f"{ident}.png"
+    if not path.exists():
+        _err = f"Preview image not found at {path}"
+        raise FileNotFoundError(_err)
+    preview = cv2.cvtColor(cv2.imread(str(path), cv2.IMREAD_COLOR), cv2.COLOR_BGR2GRAY)
+    if smooth > 0.0:
+        preview = gaussian_filter(preview, sigma=smooth)
+    if bounds is not None:
+        preview = crop(preview, bounds)
+    return preview
