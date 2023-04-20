@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from typing import Any
+from warnings import warn
 
 import cv2
 import imutils
@@ -34,11 +35,18 @@ def _cli(
 
     crop_bounds = np.around(np.array(crops[capture_id][:4])).astype(int)
 
-    src_preview = read_preview(src_path, bounds=crop_bounds, smooth=smooth)
-    dst_preview = read_preview(dst_path, bounds=crop_bounds, smooth=smooth)
+    src_preview = read_preview(src_path, bounds=crop_bounds, smooth=smooth, greyscale=True)
+    dst_preview = read_preview(dst_path, bounds=crop_bounds, smooth=smooth, greyscale=True)
     src_cube = read_cube(src_path, bounds=crop_bounds, smooth=smooth)
 
-    result, result_preview = register(dst_preview, src_preview, src_cube, debug=debug)
+    result, result_preview, matched_vis = register(dst_preview, src_preview, src_cube)
+    if result is None or result_preview is None:
+        _err = "Registration failed"
+        raise ValueError(_err)
+
+    if debug:
+        cv2.imshow("Matched Keypoints", matched_vis)
+        cv2.waitKey(0)
 
     cv2.imwrite(f"{out_path.parent}/{out_path.stem}-preview.png", result_preview)
     xr.Dataset({capture_id: result}).to_zarr(out_path.with_suffix(".zarr"), mode="w")
@@ -52,8 +60,7 @@ def register(
     orb_create_kwargs: dict[str, Any] | None = None,
     flann_index_kwargs: dict[str, Any] | None = None,
     flann_search_kwargs: dict[str, Any] | None = None,
-    debug: bool = False,
-) -> tuple[xr.DataArray, npt.NDArray]:
+) -> tuple[xr.DataArray | None, npt.NDArray | None, npt.NDArray]:
     _orb_create_kwargs = {"nfeatures": 10_000, "scaleFactor": 1.2, "scoreType": cv2.ORB_HARRIS_SCORE}
     _orb_create_kwargs.update(orb_create_kwargs or {})
     orb = cv2.ORB_create(**_orb_create_kwargs)
@@ -69,26 +76,27 @@ def register(
 
     matches = [m for m, n in matcher.knnMatch(descriptors_src, descriptors_dst, k=2) if m.distance < 0.7 * n.distance]
 
-    if debug:
-        matched_vis = cv2.drawMatches(src_preview, keypoints_src, dst_preview, keypoints_dst, matches, None)
-        matched_vis = imutils.resize(matched_vis, width=10_00)
-        cv2.imshow("Matched Keypoints", matched_vis)
-        cv2.waitKey(0)
+    matched_vis = cv2.drawMatches(src_preview, keypoints_src, dst_preview, keypoints_dst, matches, None)
+    matched_vis = imutils.resize(matched_vis, width=1_000)
 
-    pts_src = np.array([keypoints_src[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
-    pts_dst = np.array([keypoints_dst[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-    homog, _ = cv2.findHomography(pts_src, pts_dst, method=cv2.RANSAC, ransacReprojThreshold=5.0)
+    try:
+        pts_src = np.array([keypoints_src[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
+        pts_dst = np.array([keypoints_dst[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
+        homog, _ = cv2.findHomography(pts_src, pts_dst, method=cv2.RANSAC, ransacReprojThreshold=5.0)
 
-    result_preview = cv2.warpPerspective(src_preview, homog, dst_preview.shape[:2][::-1])
+        result_preview = cv2.warpPerspective(src_preview, homog, dst_preview.shape[:2][::-1])
 
-    result = xr.zeros_like(src_cube)
-    for band in result.band:
-        result.loc[..., band] = cv2.warpPerspective(
-            src_cube.sel(band=band).values, homog, dst_preview.shape[:2][::-1], borderValue=-999
-        )
-    result = xr.DataArray(result, dims=src_cube.dims, coords=src_cube.coords)
+        result = xr.zeros_like(src_cube)
+        for band in result.band:
+            result.loc[..., band] = cv2.warpPerspective(
+                src_cube.sel(band=band).values, homog, src_preview.shape[:2][::-1], borderValue=-999
+            )
+        result = xr.DataArray(result, dims=src_cube.dims, coords=src_cube.coords)
+    except cv2.error as err:
+        warn(err.msg, stacklevel=2)
+        return None, None, matched_vis
 
-    return result, result_preview
+    return result, result_preview, matched_vis
 
 
 if __name__ == "__main__":

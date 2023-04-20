@@ -44,13 +44,17 @@ def read_cube(path: Path, bounds: npt.NDArray | None, smooth: float = 0.0) -> xr
     return cube
 
 
-def read_preview(cube_path: Path, bounds: npt.NDArray[np.int_] | None, smooth: float = 0.0) -> np.ndarray:
+def read_preview(
+    cube_path: Path, bounds: npt.NDArray[np.int_] | None = None, *, smooth: float = 0.0, greyscale: bool = False
+) -> npt.NDArray:
     ident = cube_path.name.removeprefix("REFLECTANCE_").removesuffix(".hdr")
     path = cube_path.parents[1] / f"{ident}.png"
     if not path.exists():
         _err = f"Preview image not found at {path}"
         raise FileNotFoundError(_err)
-    preview = cv2.cvtColor(cv2.imread(str(path), cv2.IMREAD_COLOR), cv2.COLOR_BGR2GRAY)
+    preview = cv2.imread(str(path), cv2.IMREAD_COLOR)
+    if greyscale:
+        preview = cv2.cvtColor(preview, cv2.COLOR_BGR2GRAY)
     if smooth > 0.0:
         preview = gaussian_filter(preview, sigma=smooth)
     if bounds is not None:
