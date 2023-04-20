@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import cv2
 import imutils
@@ -34,23 +35,9 @@ def _cli(
     crops_path: Path = typer.Argument(..., exists=True),  # noqa: B008
     out_path: Path = typer.Argument(...),  # noqa: B008
     *,
-    max_feat: int = 10_000,
     smooth: float = 0.0,
     debug: bool = False,
 ):
-    register(dst_path, src_path, crops_path, max_feat=max_feat, smooth=smooth, debug=debug, save=out_path)
-
-
-def register(
-    dst_path: Path,
-    src_path: Path,
-    crops_path: Path,
-    *,
-    max_feat: int = 10_000,
-    smooth: float = 0.0,
-    debug: bool = False,
-    save: Path | None = None,
-) -> tuple[xr.DataArray, npt.NDArray]:
     capture_id = src_path.parent.parts[-2]
 
     with open(crops_path) as f:
@@ -64,20 +51,43 @@ def register(
 
     src_preview = read_preview(src_path, bounds=crop_bounds, smooth=smooth)
     dst_preview = read_preview(dst_path, bounds=crop_bounds, smooth=smooth)
+    src_cube = read_cube(src_path, bounds=crop_bounds, smooth=smooth)
 
-    orb = cv2.ORB_create(nfeatures=max_feat, scaleFactor=1.2, scoreType=cv2.ORB_HARRIS_SCORE)
+    result, result_preview = register(dst_preview, src_preview, src_cube, debug=debug)
+
+    cv2.imwrite(f"{out_path.parent}/{out_path.stem}-preview.png", result_preview)
+    xr.Dataset({capture_id: result}).to_zarr(out_path.with_suffix(".zarr"), mode="w")
+
+
+def register(
+    dst_preview: npt.NDArray,
+    src_preview: npt.NDArray,
+    src_cube: xr.DataArray,
+    *,
+    orb_create_kwargs: dict[str, Any] | None = None,
+    flann_index_kwargs: dict[str, Any] | None = None,
+    flann_search_kwargs: dict[str, Any] | None = None,
+    debug: bool = False,
+) -> tuple[xr.DataArray, npt.NDArray]:
+    _orb_create_kwargs = {"nfeatures": 10_000, "scaleFactor": 1.2, "scoreType": cv2.ORB_HARRIS_SCORE}
+    _orb_create_kwargs.update(orb_create_kwargs or {})
+    orb = cv2.ORB_create(**_orb_create_kwargs)
+
     keypoints_src, descriptors_src = orb.detectAndCompute(src_preview, None)
     keypoints_dst, descriptors_dst = orb.detectAndCompute(dst_preview, None)
 
-    matcher = cv2.FlannBasedMatcher(
-        {"algorithm": 6, "table_number": 6, "key_size": 10, "multi_probe_level": 2}, {"checks": 50}
-    )
+    _flann_index_kwargs = {"algorithm": 6, "table_number": 6, "key_size": 10, "multi_probe_level": 2}
+    _flann_index_kwargs.update(flann_index_kwargs or {})
+    _flann_search_kwargs = {"checks": 50}
+    _flann_search_kwargs.update(flann_search_kwargs or {})
+    matcher = cv2.FlannBasedMatcher(_flann_index_kwargs, _flann_search_kwargs)
+
     matches = [m for m, n in matcher.knnMatch(descriptors_src, descriptors_dst, k=2) if m.distance < 0.7 * n.distance]
 
     if debug:
         matched_vis = cv2.drawMatches(src_preview, keypoints_src, dst_preview, keypoints_dst, matches, None)
         matched_vis = imutils.resize(matched_vis, width=10_00)
-        cv2.imshow(f"Matched Keypoints - {capture_id}", matched_vis)
+        cv2.imshow("Matched Keypoints", matched_vis)
         cv2.waitKey(0)
 
     pts_src = np.array([keypoints_src[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
@@ -85,18 +95,13 @@ def register(
     homog, _ = cv2.findHomography(pts_src, pts_dst, method=cv2.RANSAC, ransacReprojThreshold=5.0)
 
     result_preview = cv2.warpPerspective(src_preview, homog, dst_preview.shape[:2][::-1])
-    if save is not None:
-        cv2.imwrite(f"{save.parent}/{save.stem}-preview.png", result_preview)
-
-    src_cube = read_cube(src_path, bounds=crop_bounds, smooth=smooth)
 
     result = xr.zeros_like(src_cube)
     for band in result.band:
-        result.loc[..., band] = cv2.warpPerspective(src_cube.sel(band=band).values, homog, dst_preview.shape[:2][::-1])
+        result.loc[..., band] = cv2.warpPerspective(
+            src_cube.sel(band=band).values, homog, dst_preview.shape[:2][::-1], borderValue=-999
+        )
     result = xr.DataArray(result, dims=src_cube.dims, coords=src_cube.coords)
-
-    if save:
-        xr.Dataset({capture_id: result}).to_zarr(save.with_suffix(".zarr"), mode="w")
 
     return result, result_preview
 
