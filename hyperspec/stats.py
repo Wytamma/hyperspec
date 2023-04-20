@@ -43,4 +43,4 @@ def pixelwise_cosine_similarity(cube1: npt.NDArray[np.float_], cube2: npt.NDArra
         _err = f"cube1 and cube2 must have the same shape, but got {arr1.shape} and {arr2.shape}"
         raise ValueError(_err)
 
-    return __cosine_similarity(arr1, arr2).reshape(cube1.shape[:-1])
+    return 1.0 - __cosine_similarity(arr1, arr2).reshape(cube1.shape[:-1])

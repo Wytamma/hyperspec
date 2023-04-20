@@ -38,8 +38,9 @@ def _cli(
     src_preview = read_preview(src_path, bounds=crop_bounds, smooth=smooth, greyscale=True)
     dst_preview = read_preview(dst_path, bounds=crop_bounds, smooth=smooth, greyscale=True)
     src_cube = read_cube(src_path, bounds=crop_bounds, smooth=smooth)
+    dst_cube = read_cube(dst_path, bounds=crop_bounds, smooth=smooth)
 
-    result, result_preview, matched_vis = register(dst_preview, src_preview, src_cube)
+    result, result_preview, matched_vis = register(dst_preview, dst_cube, src_preview, src_cube)
     if result is None or result_preview is None:
         _err = "Registration failed"
         raise ValueError(_err)
@@ -54,6 +55,7 @@ def _cli(
 
 def register(
     dst_preview: npt.NDArray,
+    dst_cube: xr.DataArray,
     src_preview: npt.NDArray,
     src_cube: xr.DataArray,
     *,
@@ -84,14 +86,14 @@ def register(
         pts_dst = np.array([keypoints_dst[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
         homog, _ = cv2.findHomography(pts_src, pts_dst, method=cv2.RANSAC, ransacReprojThreshold=5.0)
 
-        result_preview = cv2.warpPerspective(src_preview, homog, dst_preview.shape[:2][::-1])
+        result_preview = cv2.warpPerspective(src_preview, homog, src_preview.shape[:2][::-1])
 
-        result = xr.zeros_like(src_cube)
+        result = xr.zeros_like(dst_cube)
         for band in result.band:
             result.loc[..., band] = cv2.warpPerspective(
-                src_cube.sel(band=band).values, homog, src_preview.shape[:2][::-1], borderValue=-999
+                src_cube.sel(band=band).values, homog, dst_preview.shape[:2][::-1], borderValue=-999
             )
-        result = xr.DataArray(result, dims=src_cube.dims, coords=src_cube.coords)
+        result = xr.DataArray(result, dims=dst_cube.dims, coords=dst_cube.coords)
     except cv2.error as err:
         warn(err.msg, stacklevel=2)
         return None, None, matched_vis
