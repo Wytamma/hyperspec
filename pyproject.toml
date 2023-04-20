@@ -31,6 +31,7 @@ dependencies = [
     "zarr>=2.14.2",
     "typer>=0.7.0",
     "imutils>=0.5.4",
+    "numba>=0.56.4"
 ]
 
 [project.urls]
