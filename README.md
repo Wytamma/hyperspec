@@ -1,7 +1,7 @@
 # hyperspec
 
-[![PyPI - Version](https://img.shields.io/pypi/v/hyperspec.svg)](https://pypi.org/project/hyperspec)
-[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/hyperspec.svg)](https://pypi.org/project/hyperspec)
+<!-- [![PyPI - Version](https://img.shields.io/pypi/v/hyperspec.svg)](https://pypi.org/project/hyperspec) -->
+<!-- [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/hyperspec.svg)](https://pypi.org/project/hyperspec) -->
 
 -----
 
@@ -13,7 +13,7 @@
 ## Installation
 
 ```console
-pip install hyperspec
+pip install git+https://github.com/smutch/hyperspec.git
 ```
 
 ## License
