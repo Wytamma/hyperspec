@@ -24,6 +24,22 @@ def _cli(
     smooth: float = 0.0,
     debug: bool = False,
 ):
+    """
+    Runs the registration process.
+    Args:
+      dst_path (Path): Path to the destination cube.
+      src_path (Path): Path to the source cube.
+      crops_path (Path): Path to the crops file.
+      out_path (Path): Path to the output file.
+      smooth (float): Smoothing factor for the previews.
+      debug (bool): Flag to show the matched keypoints.
+    Returns:
+      None
+    Side Effects:
+      Writes the output file to the given path.
+    Examples:
+      >>> _cli(dst_path=Path("dst.hdr"), src_path=Path("src.hdr"), crops_path=Path("crops.json"), out_path=Path("out.zarr"), debug=True)
+    """
     capture_id = src_path.parent.parts[-2]
 
     with open(crops_path) as f:
@@ -63,6 +79,24 @@ def register(
     flann_index_kwargs: dict[str, Any] | None = None,
     flann_search_kwargs: dict[str, Any] | None = None,
 ) -> tuple[xr.DataArray | None, npt.NDArray | None, npt.NDArray]:
+    """
+    Registers the source cube to the destination cube.
+    Args:
+      dst_preview (npt.NDArray): Preview of the destination cube.
+      dst_cube (xr.DataArray): Destination cube.
+      src_preview (npt.NDArray): Preview of the source cube.
+      src_cube (xr.DataArray): Source cube.
+      orb_create_kwargs (dict[str, Any] | None): Keyword arguments for ORB creation.
+      flann_index_kwargs (dict[str, Any] | None): Keyword arguments for FLANN index.
+      flann_search_kwargs (dict[str, Any] | None): Keyword arguments for FLANN search.
+    Returns:
+      tuple[xr.DataArray | None, npt.NDArray | None, npt.NDArray]: The registered cube, the registered preview, and the matched keypoints visualization.
+    Side Effects:
+      None
+    Examples:
+      >>> register(dst_preview, dst_cube, src_preview, src_cube, orb_create_kwargs={"nfeatures": 1000}, flann_index_kwargs={"algorithm": 5})
+      (xr.DataArray, npt.NDArray, npt.NDArray)
+    """
     _orb_create_kwargs = {"nfeatures": 10_000, "scaleFactor": 1.2, "scoreType": cv2.ORB_HARRIS_SCORE}
     _orb_create_kwargs.update(orb_create_kwargs or {})
     orb = cv2.ORB_create(**_orb_create_kwargs)
