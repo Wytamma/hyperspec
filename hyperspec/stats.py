@@ -23,6 +23,18 @@ def pca(cube: xr.DataArray, n_components: int = 3) -> xr.Dataset:
 
 @numba.jit(nopython=True)
 def _cosine_similarity(arr1: npt.NDArray[np.float_], arr2: npt.NDArray[np.float_]) -> npt.NDArray[np.float_]:
+    """Calculate the vector-wise cosine similarity between two arrays of vectors.
+
+    NOTE: This function calculates just the diagonal component of `scipy.distance.cdist(..., metric='cosine')`.
+
+    Arguments:
+        arr1: An array of vectors with shape (N, M) where N is the number of vectors and M is the dimensionality of each
+              vector.
+        arr2: An array of vectors with the same shape (N, M) as arr1.
+
+    Returns:
+        An array of shape (N,) containing the cosine similarity between each pair of vectors.
+    """
     size = arr1.shape[0]
     dist = np.zeros(size)
     for ii in range(size):
@@ -32,7 +44,7 @@ def _cosine_similarity(arr1: npt.NDArray[np.float_], arr2: npt.NDArray[np.float_
         uu = np.average(np.square(u))
         vv = np.average(np.square(v))
         dist[ii] = max(0, min(1.0 - uv / np.sqrt(uu * vv), 2.0))
-    return dist
+    return 1.0 - dist
 
 
 def pixelwise_cosine_similarity(cube1: npt.NDArray[np.float_], cube2: npt.NDArray[np.float_]) -> npt.NDArray[np.float_]:
@@ -43,4 +55,4 @@ def pixelwise_cosine_similarity(cube1: npt.NDArray[np.float_], cube2: npt.NDArra
         _err = f"cube1 and cube2 must have the same shape, but got {arr1.shape} and {arr2.shape}"
         raise ValueError(_err)
 
-    return 1.0 - _cosine_similarity(arr1, arr2).reshape(cube1.shape[:-1])
+    return _cosine_similarity(arr1, arr2).reshape(cube1.shape[:-1])
