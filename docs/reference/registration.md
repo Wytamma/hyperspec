@@ -1,0 +1,2 @@
+::: hyperspec.registration
+
